@@ -1,6 +1,6 @@
 
-CREATE TABLE users (
-    id BIGSERIAL PRIMARY KEY,
+CREATE UNLOGGED TABLE users (
+    id bigint PRIMARY KEY,
     screen_name TEXT,
     name TEXT,
     description TEXT,
@@ -14,7 +14,7 @@ CREATE TABLE users (
     url TEXT
 );
 
-CREATE TABLE places (
+CREATE UNLOGGED TABLE places (
     id TEXT PRIMARY KEY,
     full_name TEXT,
     country TEXT,
@@ -23,7 +23,7 @@ CREATE TABLE places (
 );
 
 -- TWEETS table
-CREATE TABLE tweets (
+CREATE UNLOGGED TABLE tweets (
     id BIGINT PRIMARY KEY,
     created_at TIMESTAMP,
     full_text TEXT,
@@ -42,20 +42,20 @@ CREATE TABLE tweets (
 );
 
 -- HASHTAGS table
-CREATE TABLE hashtags (
-    id BIGSERIAL PRIMARY KEY,
+CREATE UNLOGGED TABLE hashtags (
+    id bigint PRIMARY KEY,
     tag TEXT UNIQUE
 );
 
 -- TWEET_HASHTAG table
-CREATE TABLE tweet_hashtag (
+CREATE UNLOGGED TABLE tweet_hashtag (
     tweet_id BIGINT REFERENCES tweets(id) ON DELETE CASCADE,
     hashtag_id BIGINT REFERENCES hashtags(id) ON DELETE CASCADE,
     PRIMARY KEY(tweet_id, hashtag_id)
 );
 
 -- TWEET_URLS table
-CREATE TABLE tweet_urls (
+CREATE UNLOGGED TABLE tweet_urls (
     tweet_id BIGINT REFERENCES tweets(id) ON DELETE CASCADE,
     url TEXT,
     expanded_url TEXT,
@@ -65,7 +65,7 @@ CREATE TABLE tweet_urls (
 );
 
 -- TWEET_USER_MENTIONS table
-CREATE TABLE tweet_user_mentions (
+CREATE UNLOGGED TABLE tweet_user_mentions (
     tweet_id BIGINT REFERENCES tweets(id) ON DELETE CASCADE,
     mentioned_user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
     mentioned_screen_name TEXT,
@@ -74,7 +74,7 @@ CREATE TABLE tweet_user_mentions (
 );
 
 -- TWEET_MEDIA table
-CREATE TABLE tweet_media (
+CREATE UNLOGGED TABLE tweet_media (
     tweet_id BIGINT REFERENCES tweets(id) ON DELETE CASCADE,
     media_id BIGINT,
     type TEXT,
