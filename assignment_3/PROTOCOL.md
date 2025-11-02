@@ -1,5 +1,31 @@
 # PDT Assignment 2
 
+**Author**: Filip Mojto
+
+Piate zadanie je zamerané na overenie vedomostí v oblasti PostGIS. Vašou úlohou bude vypracovať úlohy uvedené nižšie. Zadanie sa odovzdáva do 9.11.2023 23:59 a dostanete za neho 10 bodov.  Otázky 2-9 sú dokopy za 6 bodov (každá 0,75). Otázky 10 - 13 je za 4 body (každá 1). 
+
+Úlohy
+stiahnite a importujte si dataset pre Open Street mapy z https://download.geofabrik.de/europe/slovakia.html do novej DB
+zistite aké kraje sú na Slovensku (planet_osm_polygon, admin_level = ‘4’) a vypíšte súradnice ťažiska ako text s longitude a latitude. 
+zoraďte kraje podľa ich veľkosti (st_area). Veľkosť vypočítajte pomocou vhodnej funkcie a zobrazte v km^2 v SRID 5514.
+pridajte si dom, kde bývate ako polygón (nájdite si súradnice napr. cez google maps) do planet_osm_polygon (znova pozor na súradnicový systém). Výsledok zobrazte na mape.
+zistite v akom kraji je váš dom.
+pridajte si do planet_osm_point vašu aktuálnu polohu (pozor na súradnicovýsystém). Výsledok zobrazte na mape.
+zistite či ste doma - či je vaša poloha v rámci vášho bývania.
+zistite ako ďaleko sa nachádzate od FIIT (name = 'Fakulta informatiky a informačnýchtechnológií STU'). Pozor na správny súradnicový systém – vzdialenosť musí byť čo najpresnejšia.
+stiahnite si QGIS a vyplotujte kraje a váš dom z úlohy 2 na mape - napr. červenou čiarou.
+zistite súradnice centroidu (ťažiska) plošne najmenšieho okresu (vo výsledku nezabudnite uviesť aj EPSG kód súradnicového systému).
+vytvorte priestorovú tabuľku všetkých úsekov ciest, ktoré sa celé nachádzajú do 10 km od vzájomnej hranice okresov Malacky a Pezinok. Vytvorte ďalšiu tabuľku, ktorá bude obsahovať len tie úseky ciest, ktoré pretínajú túto hranicu okresov alebo sa jej dotýkajú. Výsledky overte ich zobrazením v prostrední QGIS.
+jedným dopytom zistite číslo a názov katastrálneho územia (z dát ZBGIS, https://www.geoportal.sk/sk/zbgis_smd/na-stiahnutie/), v ktorom sa nachádza najdlhší úsek cesty (z dát OSM) v okrese, v ktorom bývate.
+vytvorte oblasť Okolie_Bratislavy, ktorá bude zahŕňať zónu do 20 km od Bratislavy, ale nebude zahŕňať oblasť Bratislavy (Bratislava I až Bratislava V) a bude len na území Slovenska. Zistite jej výmeru.
+Výstup
+
+Výstup zadania je realizovaný formou protokolu, kde odpovedáte na jednotlivé otázky. Odpoveď pozostáva z SQL kódu, obrázku výstupu, mapy a zdôvodnenia. Protokol musí ďalej obsahovať všetky formálne náležitosti:
+Znenie zadania
+Meno a priezvisko riešiteľa
+Záver, kde zhodnotíte najväčšie úskalia a čo sa podarilo/nepodarilo realizovať.
+
+
 ## Task 1
 
 To be able to import the data, we took the following approach:
@@ -35,6 +61,8 @@ Assignment_4=# \dt
  public | spatial_ref_sys      | table | postgres
 (9 rows)
 
+## Task 2
+
 ### SQL Query
 ```sql
 SELECT
@@ -60,4 +88,266 @@ The visualization below shows the **geographic representation of Slovak regions*
 
 ![Task 2 - Geographic representation of Slovak Regions](img/task_2_geographic_results.png)
 
+### Task 3
 
+```sql
+SELECT
+    name,
+    ROUND(
+        CAST(
+            ST_Area(ST_Transform(way, 5514)) / 1000000.0 AS numeric
+        ), 2
+    ) AS area_km2
+FROM planet_osm_polygon
+WHERE boundary = 'administrative'
+  AND admin_level = '4'
+  AND name IS NOT NULL
+ORDER BY area_km2 DESC;
+```
+
+![Task 3 - Tabular results of Region Sizes](img/task_3_tabular_results.png)
+
+## Task 3 – Ranking Slovak Regions by Area
+
+### SQL Query
+```sql
+SELECT
+    name,
+    ROUND(
+        CAST(
+            ST_Area(ST_Transform(way, 5514)) / 1000000.0 AS numeric
+        ), 2
+    ) AS area_km2
+FROM planet_osm_polygon
+WHERE boundary = 'administrative'
+  AND admin_level = '4'
+  AND name IS NOT NULL
+ORDER BY area_km2 DESC;
+```
+
+### Description
+This query calculates the **surface area of each Slovak region** using the geometries stored in the `planet_osm_polygon` table.  
+To ensure accuracy, the geometries are transformed to the **EPSG:5514 (S-JTSK)** coordinate system using `ST_Transform`, which is suitable for measuring distances and areas within Slovakia.
+
+The function `ST_Area` computes the area of each polygon in square meters, which is then converted to **square kilometers (km²)** by dividing by 1,000,000.  
+Finally, the results are **rounded to two decimal places** and **sorted in descending order** by area.
+
+### Purpose
+We applied this query to **compare the sizes of Slovak regions** based on spatial data.  
+By ranking them according to their computed areas, we can easily identify which regions occupy the largest and smallest portions of the country.
+
+### Results
+The table and visualization below show the **area of each Slovak region** in square kilometers, sorted from largest to smallest.
+
+![Task 3 - Tabular results of Region Sizes](img/task_3_tabular_results.png)
+
+## Task 4
+
+### SQL Query
+```sql
+INSERT INTO planet_osm_polygon (osm_id, name, way)
+VALUES (
+    -2,
+    'Moj dom',
+    ST_SetSRID(
+        ST_GeomFromText('POLYGON((
+            18.19960333783049 49.017853132036976,
+            18.199538518803873 49.01788895018241,
+            18.19976784766952 49.018063096354375,
+            18.199830655041996 49.01802244094627,
+            18.19960333783049 49.017853132036976
+        ))'), 4326
+    )
+);
+
+SELECT name, ST_AsText(way), way
+FROM planet_osm_polygon
+WHERE name = 'Moj dom';
+```
+
+### Description
+
+This query inserts a **custom polygon representing the author's house** into the `planet_osm_polygon` table.
+
+The function `ST_GeomFromText()` creates a polygon geometry from WKT (Well-Known Text) format, defining the **corners of the house boundary** using longitude and latitude coordinates obtained from Google Maps.
+
+`ST_SetSRID(..., 4326)` explicitly sets the **spatial reference system to EPSG:4326** (WGS 84), which is the standard coordinate system for GPS coordinates.
+
+The `osm_id` is set to `-2` (negative values are typically used for user-generated features to avoid conflicts with official OSM data).
+
+### Purpose
+
+We applied this query to **add a custom spatial feature** (the author's residential location) to the existing OpenStreetMap database.
+
+This demonstrates the ability to:
+- Convert real-world GPS coordinates into PostGIS-compatible geometry
+- Properly handle coordinate reference systems (CRS)
+- Insert custom spatial data alongside imported OSM data
+
+The SELECT statement verifies the successful insertion by retrieving the newly added polygon, displaying both its text representation and geometric data.
+
+### Results
+
+The visualization below shows the **geographic representation of the author's house** as a polygon overlaid on the map.
+
+![Task 4 - Geographic Results of Author's house](img/task_4_geographic_results.png)
+
+The polygon accurately represents the building footprint at the specified coordinates in **Žilina, Slovakia** (approximately 49.018°N, 18.200°E).
+
+## Task 5
+
+### SQL Query
+```sql
+SELECT r.name AS kraj
+FROM planet_osm_polygon AS r
+JOIN planet_osm_polygon AS d
+  ON ST_Within(d.way, r.way)
+WHERE r.boundary = 'administrative'
+  AND r.admin_level = '4'
+  AND d.name = 'Moj dom';
+```
+
+### Description
+
+This query performs a **spatial join** to determine which Slovak region (kraj) contains the author's house.
+
+The query uses two aliases of the `planet_osm_polygon` table:
+- `r` represents regions (administrative boundaries at level 4)
+- `d` represents the author's house polygon
+
+The function `ST_Within(d.way, r.way)` performs a **spatial containment check**, returning TRUE when the house geometry is completely within a region's boundary.
+
+The WHERE clause filters for:
+- Administrative boundaries (`boundary = 'administrative'`)
+- Regional level (`admin_level = '4'`)
+- The specific house feature (`name = 'Moj dom_9'`)
+
+### Purpose
+
+We applied this query to **identify the administrative region** where the author's residence is located.
+
+This demonstrates:
+- Spatial relationship analysis using PostGIS
+- The practical application of the `ST_Within()` function for point-in-polygon operations
+- How to connect custom spatial data with official administrative boundaries
+
+
+### Results
+
+The query result shows the **name of the region** containing the author's house.
+
+![Task 5 - Tabular representation of Region Author lives in](img/task_5_tabular_results.png)
+
+## Task 6
+
+### SQL Query
+```sql
+INSERT INTO planet_osm_point (osm_id, name, way)
+VALUES (
+    -10,
+    'Moja aktuálna poloha',
+    ST_SetSRID(
+        ST_GeomFromText('POINT(17.063111978578657 48.15919730926766)'), 4326
+    )
+);
+
+SELECT name, ST_SRID(way), ST_AsText(way), way
+FROM planet_osm_point
+WHERE name = 'Moja aktuálna poloha';
+```
+
+### Description
+
+This query inserts a **point geometry representing the author's current location** into the `planet_osm_point` table.
+
+The function `ST_GeomFromText()` creates a point geometry from WKT (Well-Known Text) format using a single coordinate pair (longitude, latitude).
+
+`ST_SetSRID(..., 4326)` sets the **spatial reference system to EPSG:4326** (WGS 84), ensuring compatibility with GPS coordinates and the existing OSM data.
+
+The `osm_id` is set to `-10` (negative to distinguish user-generated features from official OSM data).
+
+The SELECT statement verifies the insertion by:
+- Retrieving the point's name
+- Checking its SRID with `ST_SRID(way)`
+- Displaying the coordinates as text with `ST_AsText(way)`
+- Returning the full geometry object
+
+### Purpose
+
+We applied this query to **add the author's current position** as a spatial point feature in the database.
+
+This demonstrates:
+- The difference between polygon and point geometry insertion
+- Proper handling of coordinate reference systems for point data
+- How to store and retrieve precise location information in PostGIS
+
+
+
+### Results
+
+The visualization below shows the **geographic representation of the author's current location** as a point on the map.
+
+![Task 6 - Geographic representation of Author's location](img/task_6_geographic_results.png)
+
+## Task 7
+
+### SQL Query
+```sql
+SELECT 
+    p.name AS poloha,
+    h.name AS dom,
+    CASE 
+        WHEN ST_Within(p.way, h.way) THEN 1 
+        ELSE 0 
+    END AS som_doma
+FROM planet_osm_point AS p
+LEFT JOIN planet_osm_polygon AS h
+  ON h.name = 'Moj dom'
+WHERE p.name = 'Moja aktuálna poloha';
+
+-- Test query with point inside house boundaries
+INSERT INTO planet_osm_point (osm_id, name, way)
+VALUES (
+    -10,
+    'Test Point',
+    ST_SetSRID(
+        ST_GeomFromText('POINT(18.19967322264156 49.01793475621987)'), 4326
+    )
+);
+```
+
+### Description
+
+This query performs a **spatial containment check** to determine whether the author's current location is inside their home.
+
+The query uses:
+- `p` alias for the point table (author's current location)
+- `h` alias for the polygon table (author's house)
+
+A `LEFT JOIN` connects the location point with the house polygon based on the house name. The `ST_Within(p.way, h.way)` function checks if the point geometry lies completely within the polygon boundary.
+
+The `CASE` statement returns:
+- `1` if the location is within the house (som doma = "I am home")
+- `0` if the location is outside the house boundaries
+
+The additional INSERT statement creates a **test point** with coordinates deliberately placed within the house boundaries to **verify the correctness** of the spatial logic.
+
+### Purpose
+
+We applied this query to **validate the spatial relationship** between two user-defined geometries.
+
+This demonstrates:
+- Practical use of point-in-polygon spatial analysis
+- Boolean spatial queries for location verification
+- Testing methodology for spatial operations
+
+### Results
+
+The query results show whether the author is at home (som_doma = 1) or not (som_doma = 0).
+
+![Task 7 - Tabular Results verifying whether author is at home](img/task_7_tabular_results.png)
+
+**Verification test**: The test point (within the house polygon from Task 4) correctly returned `som_doma = 1`, confirming the spatial logic works as expected.
+
+
+## Conclusion
