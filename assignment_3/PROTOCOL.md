@@ -349,5 +349,139 @@ The query results show whether the author is at home (som_doma = 1) or not (som_
 
 **Verification test**: The test point (within the house polygon from Task 4) correctly returned `som_doma = 1`, confirming the spatial logic works as expected.
 
+## Task 8
+
+### SQL Query
+```sql
+SELECT 
+    p.name AS moja_poloha,
+    f.name AS ciel,
+    ROUND(
+        CAST(
+            ST_Distance(
+                ST_Transform(p.way, 5514),
+                ST_Transform(f.way, 5514)
+            ) AS numeric
+        ), 2
+    ) AS vzdialenost_m
+FROM planet_osm_point AS p
+CROSS JOIN planet_osm_point AS f
+WHERE p.name = 'Moja aktuálna poloha'
+  AND f.name = 'Fakulta informatiky a informačných technológií STU';
+```
+
+### Description
+
+This query calculates the **precise distance** between the author's current location and the Faculty of Informatics and Information Technologies (FIIT) at STU.
+
+The query uses:
+- `CROSS JOIN` to combine the author's location point with the FIIT location point
+- `ST_Transform(..., 5514)` to convert both geometries to **EPSG:5514 (S-JTSK / Krovak East North)**, a projected coordinate system designed for Slovakia that uses meters as units
+- `ST_Distance()` to calculate the Euclidean distance between the two transformed points
+
+
+The result is rounded to 2 decimal places for readability.
+
+### Purpose
+
+We applied this query to **calculate accurate real-world distances** between two geographic points in Slovakia.
+
+This demonstrates:
+- The importance of coordinate system transformation for distance calculations
+- Selection of appropriate projected CRS for regional measurements
+- Practical application of spatial distance functions in PostGIS
+
+
+### Results
+
+The query returns the distance in meters between the author's current position and FIIT STU.
+
+![Task 8 - Tabular representation of distance between FIIT and author's location](img/task_8_tabular_results.png)
+
+The calculated distance represents the **straight-line (Euclidean) distance** between the two points, measured in the S-JTSK coordinate system, providing the most accurate result for locations in Slovakia.
+
+## Task 9
+
+In this task, we connected our pgadmin database with QGIS and executed some selection queries to get layers of Slovak regions and author's location.
+
+### Results
+
+The results are shown in the below images.
+
+![Task 9 - Geographic results of Slovak Regions](img/task_9_geographic_results.png)
+
+![Task 9 - Geographic results of Author's house](img/task_9_geographic_results_authors_house.png)
+
+## Task 10
+
+### SQL Query
+```sql
+SELECT
+    d.name,
+    ROUND(ST_Area(ST_Transform(d.way, 5514))::numeric / 1000000.0, 2) AS area_km2,
+    ST_AsText(ST_Centroid(ST_Transform(d.way, 5514))) AS centroid_5514_wkt,
+    ROUND(ST_X(ST_Centroid(ST_Transform(d.way, 5514)))::numeric, 2) AS centroid_x_5514_m,
+    ROUND(ST_Y(ST_Centroid(ST_Transform(d.way, 5514)))::numeric, 2) AS centroid_y_5514_m,
+    ST_AsText(ST_Transform(ST_Centroid(ST_Transform(d.way, 5514)), 4326)) AS centroid_4326_wkt,
+    ROUND(ST_X(ST_Transform(ST_Centroid(ST_Transform(d.way, 5514)), 4326))::numeric, 6) AS longitude_4326,
+    ROUND(ST_Y(ST_Transform(ST_Centroid(ST_Transform(d.way, 5514)), 4326))::numeric, 6) AS latitude_4326,
+    'EPSG:5514' AS projected_crs,
+    'EPSG:4326' AS geographic_crs
+FROM planet_osm_polygon d
+INNER JOIN planet_osm_polygon s
+    ON s.boundary = 'administrative'
+   AND s.admin_level = '2'
+   AND s.name ILIKE '%Slovensk%'
+   AND ST_Within(d.way, s.way)
+WHERE d.boundary = 'administrative'
+  AND d.admin_level = '8'
+  AND d.name IS NOT NULL
+ORDER BY ST_Area(ST_Transform(d.way, 5514)) ASC
+LIMIT 1;
+```
+
+### Description
+
+This query identifies the **smallest Slovak district by area** and calculates its centroid in multiple coordinate systems.
+
+The query structure:
+- Uses `INNER JOIN` with `ST_Within()` to ensure only districts within Slovakia are considered (admin_level = '2')
+- Filters for districts (`admin_level = '8'`) with administrative boundaries
+- Transforms geometries to **EPSG:5514** for accurate area calculation in square kilometers
+- Calculates the centroid in both projected (EPSG:5514) and geographic (EPSG:4326) coordinate systems
+
+Key functions used:
+- `ST_Area(ST_Transform(d.way, 5514))` - calculates area in square meters using S-JTSK projection
+- `ST_Centroid()` - computes the geometric center of the district polygon
+- `ST_X()` and `ST_Y()` - extract X and Y coordinates from the centroid point
+- `ST_Transform()` - converts between coordinate systems for different representations
+
+The results include:
+- District name and area in km²
+- Centroid coordinates in EPSG:5514 (X, Y in meters)
+- Centroid coordinates in EPSG:4326 (longitude, latitude in degrees)
+- Both WKT text representations for verification
+
+### Purpose
+
+We applied this query to **identify and analyze the smallest administrative district** in Slovakia using precise spatial measurements.
+
+This demonstrates:
+- Complex spatial queries combining filtering, transformation, and aggregation
+- Multi-CRS coordinate representation for different use cases
+- Proper handling of hierarchical administrative boundaries
+- Accurate area calculations using appropriate projected coordinate systems
+
+
+### Results
+
+The query returns comprehensive information about Slovakia's smallest district.
+
+![Task 10 - Tabular Results of Centroid of Smallest Slovak District](img/task_10_tabular_results.png)
+
+The results show the district name, its area in km², and the centroid coordinates in both:
+- **EPSG:5514** (S-JTSK / Krovak East North) - X and Y in meters, suitable for Slovak national mapping
+- **EPSG:4326** (WGS 84) - longitude and latitude in degrees, suitable for GPS and web mapping
+
 
 ## Conclusion
