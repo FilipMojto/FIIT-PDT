@@ -49,6 +49,7 @@ To be able to import the data, we took the following approach:
 
 We verified the installation:
 
+```bash
 Assignment_4=# \dt
                   List of tables
  Schema |         Name         | Type  |  Owner
@@ -63,6 +64,7 @@ Assignment_4=# \dt
  public | planet_osm_ways      | table | postgres
  public | spatial_ref_sys      | table | postgres
 (9 rows)
+```
 
 ## Task 2
 
@@ -511,7 +513,7 @@ AND d1.admin_level = '8' and d2.admin_level = '8';
 DROP TABLE IF EXISTS border_buffer;
 
 CREATE TEMP TABLE IF NOT EXISTS border_buffer AS
-SELECT ST_Transform(ST_buffer(ST_Transform(cb.way, 3857), 10000), 4326) as buffer
+SELECT ST_Transform(ST_buffer(ST_Transform(cb.way, 5514), 10000), 4326) as buffer
 FROM crossing_border as cb;
 
 -- SELECT * FROM border_buffer;
@@ -522,7 +524,7 @@ DROP TABLE IF EXISTS roads_in_10_km;
 CREATE TABLE roads_in_10_km AS
 SELECT r.*
 FROM border_buffer bb
-JOIN planet_osm_roads r ON ST_Intersects(bb.buffer, r.way);
+JOIN planet_osm_roads r ON ST_Within(r.way, bb.buffer);
 
 SELECT * FROM roads_in_10_km;
 ```
@@ -539,11 +541,11 @@ This table identifies and extracts the exact boundary line where the two distric
 
 **2. Border Buffer Table (`border_buffer`)**
 
-This table creates a 10 km buffer zone around the crossing border line. The operation involves a coordinate transformation workflow: the border geometry is first transformed from WGS84 (EPSG:4326) to Web Mercator (EPSG:3857) using `ST_Transform()`, then buffered by 10,000 meters (10 km) using `ST_Buffer()`, and finally transformed back to WGS84 for consistency with the original OSM data coordinate system.
+This table creates a 10 km buffer zone around the crossing border line. The operation involves a coordinate transformation workflow: the border geometry is first transformed to EPSG:5514 (S-JTSK) using `ST_Transform()`, then buffered by 10,000 meters (10 km) using `ST_Buffer()`, and finally transformed back to WGS84 (EPSG:4326) for consistency.
 
 **3. Roads in 10 km Table (`roads_in_10_km`)**
 
-This final table retrieves all roads that fall within or intersect the 10 km buffer zone. The `ST_Intersects()` function checks for any spatial overlap between the road geometries from `planet_osm_roads` and the buffer polygon, capturing all roads that are fully or partially within the defined distance from the border.
+This final table retrieves all roads that are completely contained within the 10 km buffer zone. The `ST_Within()` function checks whether road geometries are fully inside the buffer polygon, ensuring that only roads entirely within the defined distance from the border are captured.
 
 
 ### Results
@@ -577,6 +579,7 @@ The `ST_Intersects()` function evaluates whether each road geometry overlaps wit
 ### Results
 
 The results are displayed using *QGIS* system, where the crossing border and the roads that directly interect it are highlighted.
+
 
 ![Task 11 - Geographic results of crossing-border Roads only](img/task_11_crossing_roads_only_geographic_results.png)
 

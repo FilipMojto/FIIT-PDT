@@ -1,91 +1,56 @@
-## Task 13
+## Task 11 - Roads within 10 km range
 
 ### SQL Query
 
+To get all roads within 10 km from the crossing border between the two districts, the following query was proposed:
+
 ```sql
-DROP TABLE IF EXISTS bratislava_buffer;
-CREATE TABLE bratislava_buffer AS
-SELECT ST_Transform(ST_Buffer(ST_Transform(cb.way, 5514), 20000), 5514) AS buffer
-FROM planet_osm_polygon cb
-WHERE cb.boundary = 'administrative'
-  AND cb.admin_level = '6'
-  AND cb.name ILIKE 'bratislava';
+DROP TABLE IF EXISTS crossing_border;
 
-SELECT count(*) FROM slovakia_5514;
+CREATE TEMP TABLE IF NOT EXISTS crossing_border AS
+SELECT ST_Intersection(d1.way, d2.way) AS way,
+		d1.name AS district_a,
+    	d2.name AS district_b
+FROM planet_osm_polygon d1
+JOIN planet_osm_polygon d2
+ON d1.name = 'okres Pezinok' AND d2.name = 'okres Malacky'
+WHERE d1.boundary = 'administrative' AND d2.boundary = 'administrative'
+AND d1.admin_level = '8' and d2.admin_level = '8'; 
 
--- Slovakia polygon in 5514
-DROP TABLE IF EXISTS slovakia_5514;
-CREATE TABLE slovakia_5514 AS
-SELECT ST_Transform(cb.way, 5514) AS geom
-FROM planet_osm_polygon cb
-WHERE cb.admin_level = '2' AND cb.name ILIKE 'slovensk%';
 
--- Clipping buffer to Slovakia
-DROP TABLE IF EXISTS bratislava_buffer_clipped;
-CREATE TABLE bratislava_buffer_clipped AS
-SELECT ST_Intersection(bb.buffer, s.geom) AS buffer
-FROM bratislava_buffer bb
-CROSS JOIN slovakia_5514 s;
+-- SELECT * FROM crossing_border;
 
--- Uniting Bratislava districts
-DROP TABLE IF EXISTS bratislava_districts_union;
-CREATE TABLE bratislava_districts_union AS
-SELECT ST_Union(ST_Transform(cb.way, 5514)) AS geom
-FROM planet_osm_polygon cb
-WHERE cb.boundary = 'administrative'
-  AND cb.admin_level = '8'
-  AND cb.name IN ('okres Bratislava I', 'okres Bratislava II', 
-                  'okres Bratislava III', 'okres Bratislava IV', 'okres Bratislava V');
+DROP TABLE IF EXISTS border_buffer;
 
--- Excluding the districts from the buffer
-DROP TABLE IF EXISTS bratislava_district_buffer;
-CREATE TABLE bratislava_district_buffer AS
-SELECT ST_Difference(bb.buffer, bd.geom) AS buffer
-FROM bratislava_buffer_clipped bb
-CROSS JOIN bratislava_districts_union bd;
+CREATE TEMP TABLE IF NOT EXISTS border_buffer AS
+SELECT ST_Transform(ST_buffer(ST_Transform(cb.way, 5514), 10000), 4326) as buffer
+FROM crossing_border as cb;
 
--- Viewing result
-SELECT * FROM bratislava_district_buffer;
+-- SELECT * FROM border_buffer;
 
--- Calculating the area
-SELECT SUM(ST_Area(buffer)) AS vymera_m2
-FROM bratislava_district_buffer;
+
+DROP TABLE IF EXISTS roads_in_10_km;
+
+CREATE TABLE roads_in_10_km AS
+SELECT r.*
+FROM border_buffer bb
+JOIN planet_osm_roads r ON ST_Within(r.way, bb.buffer);
+
+SELECT * FROM roads_in_10_km;
 ```
 
 ### Interpretation
 
-This query calculates the area of a 20 km buffer zone around Bratislava, excluding the city's own districts and clipped to Slovakia's borders. The analysis follows a multi-stage geometric processing workflow:
+To get the correct results, several temporary tables were created in a three-stage process:
 
-**1. Initial Buffer Creation (`bratislava_buffer`)**
+**1. Crossing Border Table (`crossing_border`)**
 
-A 20 km (20,000 meter) buffer zone is created around the Bratislava administrative boundary (admin_level = '6'). The geometry is transformed to EPSG:5514 (S-JTSK) before buffering to ensure accurate metric distance calculations, then kept in this coordinate system for subsequent operations. This buffer extends 20 km in all directions from Bratislava's boundaries.
+This table identifies and extracts the exact boundary line where the two districts meet. Using `ST_Intersection()`, the query computes the geometric intersection between the polygon boundaries of okres Pezinok and okres Malacky. The result is a linear geometry representing their shared border, along with the names of both districts for reference.
 
-**2. Slovakia Boundary Extraction (`slovakia_5514`)**
+**2. Border Buffer Table (`border_buffer`)**
 
-The national boundary of Slovakia is extracted and transformed to EPSG:5514. This polygon (admin_level = '2') serves as a clipping mask to ensure the buffer zone doesn't extend beyond Slovakia's borders into neighboring countries (Austria, Czech Republic, Hungary).
+This table creates a 10 km buffer zone around the crossing border line. The operation involves a coordinate transformation workflow: the border geometry is first transformed to EPSG:5514 (S-JTSK) using `ST_Transform()`, then buffered by 10,000 meters (10 km) using `ST_Buffer()`, and finally transformed back to WGS84 (EPSG:4326) for consistency with the original OSM data coordinate system. This buffer represents the area of interest for finding nearby roads.
 
-**3. Buffer Clipping (`bratislava_buffer_clipped`)**
+**3. Roads in 10 km Table (`roads_in_10_km`)**
 
-Using `ST_Intersection()`, the buffer is clipped to Slovakia's national boundaries. This operation removes any portions of the buffer that would extend into neighboring countries, ensuring the analysis focuses solely on Slovak territory within 20 km of Bratislava.
-
-**4. Bratislava Districts Union (`bratislava_districts_union`)**
-
-All five Bratislava city districts (admin_level = '8': Bratislava I through V) are merged into a single unified polygon using `ST_Union()`. This creates a complete representation of the city proper that needs to be excluded from the final buffer zone.
-
-**5. Final Buffer Calculation (`bratislava_district_buffer`)**
-
-The `ST_Difference()` function subtracts the unified Bratislava districts from the clipped buffer, creating a "donut" shape that represents only the surrounding area within 20 km of the city, excluding the city itself. This isolates the peripheral zone of interest.
-
-**6. Area Calculation**
-
-Finally, `ST_Area()` computes the total area of this peripheral buffer zone in square meters. Since all operations were performed in EPSG:5514, the area measurement is accurate and uses metric units appropriate for Slovak geographic analysis.
-
-This approach demonstrates advanced spatial operations including buffering, clipping, union, and difference operations to precisely define and measure a complex geographic zone.
-
-### Results
-
-![Task 13 - Geographic Results of Required Territory](img/task_13_geographic_results.png)
-
-![Task 13 - Tabular Results of Required Territory's Area](img/task_13_tabular_results.png)
-
-The geographic visualization shows the 20 km buffer zone surrounding Bratislava (excluding the city districts themselves), clipped to Slovakia's borders. The tabular results display the total area of this peripheral zone in square meter
+This final table retrieves all roads that are completely contained within the 10 km buffer zone. The `ST_Within()` function checks whether road geometries are fully inside the buffer polygon, ensuring that only roads entirely within the defined distance from the border are captured. This is more restrictive than `ST_Intersects()`, as it excludes roads that only partially enter the buffer zone or cross its boundary. The result is stored as a permanent table for further analysis or visualization.
