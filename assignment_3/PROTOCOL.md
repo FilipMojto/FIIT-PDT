@@ -585,77 +585,27 @@ The results are displayed using *QGIS* system, where the crossing border and the
 
 ## Task 12
 
-### SQL Query
-
-```sql
-DROP TABLE IF EXISTS road_lengths;
-
-CREATE TEMP TABLE road_lengths AS
-SELECT
-    osm_id,
-    name,
-    ST_Length(ST_Transform(way, 5514)) AS length_meters,
-    ST_Transform(way, 5514) AS geom
-FROM planet_osm_roads r;
-
-
-ALTER TABLE kataster_uzemia DROP COLUMN IF EXISTS geom_5514;
-
--- pre-trasnforming
-ALTER TABLE kataster_uzemia ADD COLUMN geom_5514 geometry(MultiPolygon, 5514);
-UPDATE kataster_uzemia
-SET geom_5514 = ST_Transform(geom, 5514);
-
-DROP TABLE IF EXISTS katasters;
-
-CREATE TABLE katasters AS
-SELECT
-	id as id,
-	ST_Intersection(ku.geom_5514, rl.geom) as geom,
-    ku.id AS kataster_id,
-    ku.nazov_ml AS kataster_name,
-    rl.osm_id,
-    rl.name AS road_name,
-    rl.length_meters,
-    rl.geom as road_geom
-FROM kataster_uzemia ku
-JOIN road_lengths rl
-	ON rl.name ILIKE 'ilava' AND ku.nazov_ml ILIKE 'ilava%';
-
-SELECT
-	id,
-    kataster_name,
-    road_name,
-    MAX(length_meters) AS longest_road_length
-FROM katasters
-WHERE kataster_name IN (
-    SELECT nazov_ml
-    FROM kataster_uzemia
-)
-GROUP BY id, kataster_name, road_name
-ORDER BY longest_road_length DESC
-LIMIT 1;	
-```
-
 ### Interpretation
 
-This query identifies the cadastral area within the Ilava district that contains the longest road segment. The analysis is performed through several interconnected steps:
+This query identifies the longest road segment within cadastral areas of the Ilava district. The analysis is performed through the following steps:
 
-**1. Road Length Calculation (`road_lengths` table)**
+**1. Spatial Join Between Roads and Cadastral Areas**
 
-All roads from the OSM dataset are transformed to the S-JTSK coordinate system (EPSG:5514). This transformation is crucial because EPSG:5514 uses meters as units, enabling accurate length calculations using `ST_Length()`.
+The query joins the `planet_osm_roads` table with the `kataster_uzemia` table using `ST_Intersects()` to find all roads that overlap with cadastral boundaries. Both geometries are transformed to the S-JTSK coordinate system (EPSG:5514) during this operation.
 
-**2. Coordinate System Standardization**
+**2. Filtering for Ilava District**
 
-To optimize performance and ensure geometric accuracy, the `kataster_uzemia` table is prepared by adding a pre-transformed geometry column (`geom_5514`). This avoids repeated on-the-fly transformations during spatial operations.
+Two filters are applied:
+- Roads are filtered using `rl.name ILIKE '%okres ilava%'` to include only those within the Ilava district
+- Cadastral areas are filtered using `ku.nazov_ml ILIKE 'ilava%'` to focus on areas whose names start with "Ilava"
 
-**3. Spatial Intersection (`katasters` table)**
+**3. Road Length Calculation**
 
-The query performs a spatial join between cadastral areas and roads, filtering for entities related to "Ilava" using case-insensitive pattern matching (`ILIKE`). The `ST_Intersection()` function computes the exact geometry where each road segment overlaps with cadastral boundaries.
+For each road-cadastral area intersection, the query calculates the road length using `ST_Length()` on the geometry transformed to EPSG:5514. This coordinate system uses meters as units, enabling accurate length measurements.
 
-**4. Longest Road Identification**
+**4. Aggregation and Result Selection**
 
-The final SELECT statement aggregates the results by cadastral area and road name, using `MAX()` to find the longest road segment. The results are ordered by descending length and limited to the top result, revealing which cadastral area in the Ilava district contains the longest continuous road segment.
+The results are grouped by cadastral area (`ku.id`, `ku.nazov_ml`) and road name (`rl.name`). The `MAX()` function selects the longest road segment for each group. Finally, the results are ordered by descending length and limited to the top result, revealing which cadastral area contains the longest road segment matching the criteria.
 
 
 ### Results
