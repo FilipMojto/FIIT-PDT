@@ -17,108 +17,6 @@ echo "Deleting existing index (if any)..."
 curl -s -X DELETE "$ES_URL/$INDEX_NAME" -H "Content-Type: application/json"
 
 echo -e "\nCreating new index with analyzers..."
-# curl -s -X PUT "$ES_URL/$INDEX_NAME" -H "Content-Type: application/json" -d "{
-#   \"settings\": {
-#     \"number_of_shards\": 3,
-#     \"number_of_replicas\": 1,
-#     \"index.max_ngram_diff\": 3,
-#     \"analysis\": {
-#       \"analyzer\": {
-#         \"englando\": {
-#           \"type\": \"custom\",
-#           \"char_filter\": [\"html_strip\"],
-#           \"tokenizer\": \"standard\",
-#           \"filter\": [
-#             \"english_possessive_stemmer\",
-#             \"lowercase\",
-#             \"english_stop\",
-#             \"english_stemmer\"
-#           ]
-#         },
-#         \"ngram_analyzer\": {
-#           \"type\": \"custom\",
-#           \"tokenizer\": \"standard\",
-#           \"filter\": [\"lowercase\", \"ngram_filter\"]
-#         },
-#         \"shingle_analyzer\": {
-#           \"type\": \"custom\",
-#           \"tokenizer\": \"standard\",
-#           \"filter\": [\"lowercase\", \"filter_shingles\"]
-#         },
-#         \"custom_ngram\": {
-#           \"type\": \"custom\",
-#           \"char_filter\": [\"html_strip\"],
-#           \"tokenizer\": \"standard\",
-#           \"filter\": [\"lowercase\", \"asciifolding\", \"filter_ngrams\"]
-#         },
-#         \"custom_shingles\": {
-#           \"type\": \"custom\",
-#           \"char_filter\": [\"html_strip\"],
-#           \"tokenizer\": \"standard\",
-#           \"filter\": [\"lowercase\", \"asciifolding\", \"filter_shingles\"]
-#         }
-#       },
-#       \"filter\": {
-#         \"english_possessive_stemmer\": {
-#           \"type\": \"stemmer\",
-#           \"language\": \"possessive_english\"
-#         },
-#         \"english_stop\": {
-#           \"type\": \"stop\",
-#           \"stopwords\": \"_english_\"
-#         },
-#         \"english_stemmer\": {
-#           \"type\": \"stemmer\",
-#           \"language\": \"english\"
-#         },
-#         \"ngram_filter\": {
-#           \"type\": \"ngram\",
-#           \"min_gram\": 3,
-#           \"max_gram\": 6
-#         },
-#         \"filter_shingles\": {
-#           \"type\": \"shingle\",
-#           \"min_shingle_size\": 2,
-#           \"max_shingle_size\": 3,
-#           \"token_separator\": \"\",
-#           \"output_unigrams\": true
-#         },
-#         \"filter_ngrams\": {
-#           \"type\": \"ngram\",
-#           \"min_gram\": 3,
-#           \"max_gram\": 6
-#         }
-#       }
-#     }
-#   },
-#   \"mappings\": {
-#     \"dynamic\": \"strict\",
-#     \"properties\": {
-#       \"text\": {
-#         \"type\": \"text\",
-#         \"analyzer\": \"$DEFAULT_ANALYZER\"
-#       },
-#       \"user\": {
-#         \"properties\": {
-#           \"id\": { \"type\": \"long\" },
-#           \"name\": { \"type\": \"text\" }
-#         }
-#       },
-#       \"retweeted_status\": {
-#         \"properties\": {
-#           \"id\": { \"type\": \"long\" },
-#           \"text\": { \"type\": \"text\", \"analyzer\": \"$DEFAULT_ANALYZER\" }
-#         }
-#       },
-#       \"quoted_status\": {
-#         \"properties\": {
-#           \"id\": { \"type\": \"long\" },
-#           \"text\": { \"type\": \"text\", \"analyzer\": \"$DEFAULT_ANALYZER\" }
-#         }
-#       }
-#     }
-#   }
-# }"
 
 curl -X PUT "http://localhost:9200/tweets" -H "Content-Type: application/json" -d @- <<'JSON'
 {
@@ -193,6 +91,10 @@ curl -X PUT "http://localhost:9200/tweets" -H "Content-Type: application/json" -
       "is_quote_status": { "type": "boolean" },
       "quoted_status_id": { "type": "long" },
       "quoted_status_id_str": { "type": "keyword" },
+      "withheld_in_countries": {
+        "type": "keyword",
+        "index": false
+      },
       "quoted_status_permalink": {
         "type": "object",
         "dynamic": "false"
@@ -500,6 +402,14 @@ curl -X PUT "http://localhost:9200/tweets" -H "Content-Type: application/json" -
         "type": "object",
         "dynamic": "strict",
         "properties": {
+          "withheld_in_countries": {
+            "type": "keyword",
+            "index": false
+          },
+          "scopes": {
+            "type": "object",
+            "dynamic": "false"
+          },
           "contributors": { "type": "long" },
           "is_quote_status": { "type": "boolean" },
           "quoted_status_id": { "type": "long" },
@@ -632,6 +542,10 @@ curl -X PUT "http://localhost:9200/tweets" -H "Content-Type: application/json" -
             "type": "nested",
             "dynamic": "strict",
             "properties": {
+              "withheld_in_countries": {
+                "type": "keyword",
+                "index": false
+              },
               "id": { "type": "long" },
               "id_str": { "type": "keyword" },
               "name": {
@@ -719,6 +633,14 @@ curl -X PUT "http://localhost:9200/tweets" -H "Content-Type: application/json" -
         "type": "object",
         "dynamic": "strict",
         "properties": {
+          "withheld_in_countries": {
+            "type": "keyword",
+            "index": false
+          },
+          "scopes": {
+            "type": "object",
+            "dynamic": "false"
+          },
           "lang": { "type": "keyword" },
           "retweet_count": { "type": "integer" },
           "favorite_count": { "type": "integer" },
@@ -848,6 +770,10 @@ curl -X PUT "http://localhost:9200/tweets" -H "Content-Type: application/json" -
             "type": "nested",
             "dynamic": "strict",
             "properties": {
+              "withheld_in_countries": {
+                "type": "keyword",
+                "index": false
+              },
               "id": { "type": "long" },
               "id_str": { "type": "keyword" },
               "name": {
