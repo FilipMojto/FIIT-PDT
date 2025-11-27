@@ -140,9 +140,13 @@ curl -X PUT "http://localhost:9200/tweets" -H "Content-Type: application/json" -
       },
 
       "user": {
-        "type": "nested",
+        "type": "object",
         "dynamic": "strict",
         "properties": {
+          "withheld_in_countries": {
+            "type": "keyword",
+            "index": false
+          },
           "id": { "type": "long" },
           "id_str": { "type": "keyword" },
           "name": {
@@ -256,7 +260,7 @@ curl -X PUT "http://localhost:9200/tweets" -H "Content-Type: application/json" -
         "dynamic": "strict",
         "properties": {
           "id": { "type": "keyword" },
-          "url": { "type": "keyword" },
+          "url": { "type": "text",  "analyzer": "custom_ngram" },
           "place_type": { "type": "keyword" },
           "contained_within": {
             "type": "geo_shape"
@@ -349,8 +353,13 @@ curl -X PUT "http://localhost:9200/tweets" -H "Content-Type: application/json" -
           "urls": {
             "type": "nested",
             "properties": {
-              "url": { "type": "keyword" },
-              "expanded_url": { "type": "keyword" },
+              "url": { "type": "keyword", "index": false },
+              "expanded_url": { 
+                "type": "keyword",
+                "fields": {
+                  "ngram": { "type": "text", "analyzer": "custom_ngram" }
+                }
+              },
               "display_url": {
                 "type": "text",
                 "analyzer": "englando",
@@ -539,7 +548,7 @@ curl -X PUT "http://localhost:9200/tweets" -H "Content-Type: application/json" -
             }
           },
           "user": { 
-            "type": "nested",
+            "type": "object",
             "dynamic": "strict",
             "properties": {
               "withheld_in_countries": {
@@ -767,7 +776,7 @@ curl -X PUT "http://localhost:9200/tweets" -H "Content-Type: application/json" -
             }
           },
           "user": { 
-            "type": "nested",
+            "type": "object",
             "dynamic": "strict",
             "properties": {
               "withheld_in_countries": {

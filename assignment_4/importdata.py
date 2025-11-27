@@ -55,12 +55,6 @@ def correct_lat_lon_range(coords):
         corrected.append([lon, lat])
     return corrected
 
-# def sanitize_tweet(bounding_box):
-#     if bounding_box and 'coordinates' in bounding_box:
-#         coords = bounding_box['coordinates'][0]
-#         bounding_box['coordinates'][0] = close_polygon(coords)
-#         bounding_box['coordinates'][0] = correct_lat_lon_range(bounding_box['coordinates'][0])
-#     return bounding_box  # safe
     
 def sanitize_bounding_box(bb):
     if bb and 'coordinates' in bb:
@@ -98,40 +92,12 @@ def import_jsonl_gz(file_path, timeout=10, bulk_size=500):
                 continue
 
             tweet = json.loads(line)
-            # sanitize bounding boxes
-            # place = tweet.get('place')
-            # if place and place.get('bounding_box'):
-            #     place['bounding_box'] = sanitize_tweet(place['bounding_box'])
-            
-            # place = tweet.get('quoted_status', {}).get('place')
-            # if place and place.get('bounding_box'):
-            #     place['bounding_box'] = sanitize_tweet(place['bounding_box'])
-            
-            # place = tweet.get('retweeted_status', {}).get('place')
-            # if place and place.get('bounding_box'):
-            #     place['bounding_box'] = sanitize_tweet(place['bounding_box'])
-            # if tweet.get('place') and tweet['place'].get('bounding_box'):
-            #     tweet['place']['bounding_box'] = sanitize_tweet(tweet['place']['bounding_box'])
-            
-            # # nested tweets
-            # for key in ('quoted_status', 'retweeted_status'):
-            #     obj = tweet.get(key)
-            #     if obj and obj.get('place') and obj['place'].get('bounding_box'):
-            #         obj['place']['bounding_box'] = sanitize_tweet(obj['place']['bounding_box'])
+
             fix_tweet_bounding_boxes(tweet)
 
-                        
-
-
-            
-
-
-            # bulk_lines.append(json.dumps({"index": {"_index": "tweets"}}))
-            # bulk_lines.append(line)
-            # bulk_lines.append('{"index":{}}')
-            # bulk_lines.append(json.dumps(tweet))
             bulk_lines.append(json.dumps({"index": {"_index": "tweets"}}))
             bulk_lines.append(json.dumps(tweet))
+            
             if len(bulk_lines) >= bulk_size:
                 try:
                     res = requests.post(ES_URL, data="\n".join(bulk_lines)+"\n",
