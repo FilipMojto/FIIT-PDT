@@ -154,11 +154,154 @@ Highlight: <em>URGENTE</em> 10.25 // NICOLE NEUMANN TIENE <em>CORONAVIRUS</em>
 
 ### JSON Query
 
+```python
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "nested": {
+            "path": "entities.hashtags",
+            "query": {
+              "bool": {
+                "should": [
+                  { "match": { "entities.hashtags.text": "covid" } },
+                  { "match": { "entities.hashtags.text": "virus" } }
+                ],
+                "minimum_should_match": 1
+              }
+            },
+            "inner_hits": {
+              "name": "matched_hashtags",
+              "size": 5
+            }
+          }
+        },
+        {
+          "nested": {
+            "path": "entities.user_mentions",
+            "query": {
+              "bool": {
+                "must": [
+                  {
+                    "term": {
+                      "entities.user_mentions.screen_name": "realdonaldtrump"
+                    }
+                  }
+                ]
+              }
+            },
+            "inner_hits": {
+              "name": "matched_mentions",
+              "size": 5
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+#### Query Justification
+A standard match query does not respect nested document boundaries.
+Elasticsearch "flattens" arrays into lists of values.
+If you query nested fields without using nested, ES may mix values from different objects within the same array, because it no longer knows which fields belonged together inside a single nested object.
+
+Although hashtags and mentions are separate arrays, each array still contains structured objects whose internal fields must be kept together.
+
 ### Results
+
+```sh
+Total Hits: 1610
+ID: yRpnvpoBka5jCMk0EV5Y
+Score: 11.055781
+Matched Hashtags:
+ - virus
+Matched Mentions:
+ - realDonaldTrump
+```
 
 
 ## Task 4
 
 ### JSON Query
 
+We used the following query to get the aggregations.
+
+```python
+query_task_4 = {
+  "size": 0,
+  "aggs": {
+    "venezuela_bucket": {
+      "filter": {
+        "bool": {
+          "should": [
+            { "match_phrase": { "user.location": "Venezolano" } },
+            { "match_phrase": { "user.location": "Venezuela" } }
+          ]
+        }
+      },
+      "aggs": {
+        "venezuela_histogram": {
+          "date_histogram": {
+            "field": "created_at",
+            "calendar_interval": "1d"
+          },
+          "aggs": {
+            "avg_retweets": {
+              "avg": { "field": "retweet_count" }
+            }
+          }
+        }
+      }
+    },
+
+    "global_stats": {
+      "global": {},
+      "aggs": {
+        "global_histogram": {
+          "date_histogram": {
+            "field": "created_at",
+            "calendar_interval": "1d"
+          },
+          "aggs": {
+            "avg_retweets": {
+              "avg": { "field": "retweet_count" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
 ### Results
+
+After reviewing the results and comparing users from Venezuela and users from all over the world, we come to conclusion that Venezuleian users are generally less active when it comes to posting on tweeters. Attributes *Tweet Count* and *Avg Retweets* were observed and for global users their values are always greater, no matter of day.
+
+```sh
+Date: Sat Aug 01 2020, Tweet Count: 10072, Avg Retweets: 483.93
+Date: Sun Aug 02 2020, Tweet Count: 8369, Avg Retweets: 665.98
+Date: Mon Aug 03 2020, Tweet Count: 3924, Avg Retweets: 1733.08
+Date: Tue Aug 04 2020, Tweet Count: 9019, Avg Retweets: 722.02
+Date: Wed Aug 05 2020, Tweet Count: 7462, Avg Retweets: 880.92
+Date: Thu Aug 06 2020, Tweet Count: 4803, Avg Retweets: 572.21
+Date: Fri Aug 07 2020, Tweet Count: 4009, Avg Retweets: 1340.06
+Date: Sat Aug 08 2020, Tweet Count: 5716, Avg Retweets: 1078.40
+Date: Sun Aug 09 2020, Tweet Count: 7375, Avg Retweets: 456.19
+Date: Mon Aug 10 2020, Tweet Count: 604, Avg Retweets: 3504.20
+
+Global Tweet Stats:
+Date: Sat Aug 01 2020, Tweet Count: 1255214, Avg Retweets: 5755.74
+Date: Sun Aug 02 2020, Tweet Count: 483099, Avg Retweets: 7969.85
+Date: Mon Aug 03 2020, Tweet Count: 481484, Avg Retweets: 5748.72
+Date: Tue Aug 04 2020, Tweet Count: 1110528, Avg Retweets: 4471.54
+Date: Wed Aug 05 2020, Tweet Count: 985548, Avg Retweets: 7463.80
+Date: Thu Aug 06 2020, Tweet Count: 467151, Avg Retweets: 4188.56
+Date: Fri Aug 07 2020, Tweet Count: 328190, Avg Retweets: 5459.85
+Date: Sat Aug 08 2020, Tweet Count: 486094, Avg Retweets: 3667.06
+Date: Sun Aug 09 2020, Tweet Count: 658174, Avg Retweets: 4346.84
+Date: Mon Aug 10 2020, Tweet Count: 153537, Avg Retweets: 15333.94
+```
