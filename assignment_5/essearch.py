@@ -240,42 +240,43 @@ def main():
     #     print("-" * 40)
 
     #searching with query_task_3
-    # res = es.search(index="tweets", body=query_task_3, size=10)
-    # print(f"Total Hits: {res['hits']['total']['value']}")
-    # for hit in res['hits']['hits']:
-    #     print(f"ID: {hit['_id']}")
-    #     print(f"Score: {hit['_score']}")
+    res = es.search(index="tweets", body=query_task_3, size=10)
+    print(f"Total Hits: {res['hits']['total']['value']}")
+    for hit in res['hits']['hits']:
+        print(f"ID: {hit['_id']}")
+        print(f"Score: {hit['_score']}")
+        print(f"Full Text: {hit['_source']['full_text']}")
 
-    #     if 'inner_hits' in hit:
-    #         if 'matched_hashtags' in hit['inner_hits']:
-    #             print("Matched Hashtags:")
-    #             for hashtag_hit in hit['inner_hits']['matched_hashtags']['hits']['hits']:
-    #                 print(f" - {hashtag_hit['_source']['text']}")
+        if 'inner_hits' in hit:
+            if 'matched_hashtags' in hit['inner_hits']:
+                print("Matched Hashtags:")
+                for hashtag_hit in hit['inner_hits']['matched_hashtags']['hits']['hits']:
+                    print(f" - {hashtag_hit['_source']['text']}")
 
-    #         if 'matched_mentions' in hit['inner_hits']:
-    #             print("Matched Mentions:")
-    #             for mention_hit in hit['inner_hits']['matched_mentions']['hits']['hits']:
-    #                 print(f" - {mention_hit['_source']['screen_name']}")
-    #                 # print(f"   Name: {mention_hit['_source']['screen_name']['keyword']}")
+            if 'matched_mentions' in hit['inner_hits']:
+                print("Matched Mentions:")
+                for mention_hit in hit['inner_hits']['matched_mentions']['hits']['hits']:
+                    print(f" - {mention_hit['_source']['screen_name']}")
+                    # print(f"   Name: {mention_hit['_source']['screen_name']['keyword']}")
 
-    #     print("-" * 40)
+        print("-" * 40)
     
     #searching with query_task_4
-    res = es.search(index="tweets", body=query_task_4)
-    venezuela_buckets = res['aggregations']['venezuela_bucket']['venezuela_histogram']['buckets']
-    global_buckets = res['aggregations']['global_stats']['global_histogram']['buckets']
-    print("Venezuela Tweet Stats:")
-    for bucket in venezuela_buckets:
-        date = bucket['key_as_string']
-        doc_count = bucket['doc_count']
-        avg_retweets = bucket['avg_retweets']['value']
-        print(f"Date: {date}, Tweet Count: {doc_count}, Avg Retweets: {avg_retweets:.2f}")
-    print("\nGlobal Tweet Stats:")
-    for bucket in global_buckets:
-        date = bucket['key_as_string']
-        doc_count = bucket['doc_count']
-        avg_retweets = bucket['avg_retweets']['value']
-        print(f"Date: {date}, Tweet Count: {doc_count}, Avg Retweets: {avg_retweets:.2f}")
+    # res = es.search(index="tweets", body=query_task_4)
+    # venezuela_buckets = res['aggregations']['venezuela_bucket']['venezuela_histogram']['buckets']
+    # global_buckets = res['aggregations']['global_stats']['global_histogram']['buckets']
+    # print("Venezuela Tweet Stats:")
+    # for bucket in venezuela_buckets:
+    #     date = bucket['key_as_string']
+    #     doc_count = bucket['doc_count']
+    #     avg_retweets = bucket['avg_retweets']['value']
+    #     print(f"Date: {date}, Tweet Count: {doc_count}, Avg Retweets: {avg_retweets:.2f}")
+    # print("\nGlobal Tweet Stats:")
+    # for bucket in global_buckets:
+    #     date = bucket['key_as_string']
+    #     doc_count = bucket['doc_count']
+    #     avg_retweets = bucket['avg_retweets']['value']
+    #     print(f"Date: {date}, Tweet Count: {doc_count}, Avg Retweets: {avg_retweets:.2f}")
         
 
 
