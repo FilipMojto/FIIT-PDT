@@ -107,7 +107,30 @@ The motivation is simple:
     - listing users by follower count.
 
 This approach prevents loading potentially massive arrays and keeps frequently needed metrics lightweight and fast to access.
+
+### Hashtags
+
+Hashtags were stored in a separate Hashtags collection to support efficient search operations, especially autocomplete.
+If hashtags were stored only as arrays inside the Posts collection, MongoDB would need to scan many posts just to check distinct tag values or to match a prefix. This becomes slow as the number of posts grows.
+
+By placing hashtags in their own collection—where each hashtag is stored once and indexed—MongoDB can perform:
+
+- **Instant autocomplete** using indexed prefix matching
+- **Fast exact-match searches** (e.g., finding all posts with a given hashtag)
+- **Efficient distinct operations**
+- **Trending analytics** (counting posts per hashtag)
  
+### Write Optimization Trade-off (Fan-Out on Write)
+The architecture deliberately prioritizes read performance, especially on the homepage feed, which accounts for the majority of all operations.
+Because all essential metadata—such as newest comments, reaction counts, and author information—is pre-embedded inside each user’s feed cache (latest_posts_followed), the system can load the timeline in a single lightweight query without touching the Posts, Comments, or Follows collections.
+
+This design naturally introduces a write amplification cost:
+operations such as creating a new post or adding a comment must update multiple locations:
+
+- the Posts collection,
+- the author's own feed subset (my_latest_posts), and
+- the cached feed documents of every follower.
+
 ## JSON-like Examples
 
 The json-like structure for the documents is already proposed in the diagram. However, we include some example instances:
@@ -220,26 +243,55 @@ The json-like structure for the documents is already proposed in the diagram. Ho
 
 Below are some demonstrations of commonly used queries in our designed database.
 
-#### Create a Post
+#### User Feed (35%)
+
 ```json
-db.Posts.insertOne({
-  author_id: ObjectId("675aaa100000000000000002"),
-  created_at: new Date(),
-  type: "text",
-  text: "MongoDB is awesome!",
-  tags: ["mongodb", "nosql"],
-  comments_count: 0,
-  likes_count: 0,
-  location: [48.15, 17.10]
-});
+//Fan-Out on Write
+// All data are already provided and ready to be feeded
+db.Users.findOne(
+  { _id: USER_ID },
+  { latest_posts_followed: 1, _id: 0 }
+);
 ```
 
-#### Insert a Reaction (Fast Write)
+#### Clicking on Post (20%)
+
+```json
+
+// create index for faster search
+db.Posts.createIndex({ _id: 1 });
+
+// fetch post, getting the reactions counts (likes_count, reactions_count)
+const post = db.Posts.findOne({ _id: POST_ID });
+
+// getting author details
+const author = db.Users.findOne(
+  { _id: post.author_id },
+  {
+    projection: {
+      username: 1,
+      avatar: 1,
+      bio: 1,
+      stats: 1,
+    }
+  }
+);
+
+// get all comments for paginated
+db.Comments.find({
+  post_id: POST_ID,
+  created_at: { $gt: lastLoadedTimestamp } 
+})
+.sort({ created_at: 1 })
+.limit(10)
+```
+
+#### Insert a Reaction (15%)
 
 ```json
 db.Reactions.insertOne({
   user_id: ObjectId("675aaa100000000000000001"),
-  target_id: ObjectId("675aaa300000000000000011"),
+  target_id: ObjectId("675aaa300000000000000011"), // can be a comment or post
   type: "like",
   created_at: new Date()
 });
@@ -254,55 +306,254 @@ db.Posts.updateOne(
 );
 ```
 
-#### Get All Comments for a Post (Paginated)
+#### Creating a Comment (10%)
 
 ```json
-db.Comments.find({ post_id: POST_ID })
-    .sort({ created_at: 1 })
-    .skip(20)
-    .limit(10);
+// create a new comment and insert into db
+const inserted = db.Comments.insertOne({
+  post_id: POST_ID,
+  author_id: USER_ID,
+  text: COMMENT_TEXT,
+  created_at: new Date()
+});
+
+// remember the id
+const commentId = inserted.insertedId;
+
+// update the commented post's counts
+db.Posts.updateOne(
+  { _id: POST_ID },
+  { $inc: { comments_count: 1 } }
+);
+
+// update the commented post's newest comments
+db.Posts.updateOne(
+  { _id: POST_ID },
+  {
+    $push: {
+      newest_comments: {
+        $each: [{
+          text: COMMENT_TEXT,
+          username: COMMENT_AUTHOR_USERNAME,
+          created_at: new Date()
+        }],
+        $sort: { created_at: -1 },
+        $slice: 3
+      }
+    }
+  }
+);
 ```
 
-#### User Feed – Load Posts From People I Follow
-
-Step 1: Find the IDs the user follows
+Update embedded comments in EVERY follower’s feed:
 
 ```json
-const followees = db.Follows
-    .find({ follower_id: USER_ID })
-    .map(f => f.followee_id);
+// get the author of the post
+const post = db.Posts.findOne({ _id: POST_ID }, { author_id: 1 });
+const authorId = post.author_id;
+
+//find all followers of the post author
+const followers = db.Follows
+  .find({ followee_id: authorId })
+  .map(f => f.follower_id);
+
+//update embedded newest_comments in each follower’s feed
+db.Users.updateMany(
+  { _id: { $in: followers } },
+  {
+    $push: {
+      "latest_posts_followed.$[p].newest_comments": {
+        $each: [{
+          text: COMMENT_TEXT,
+          username: COMMENT_AUTHOR_USERNAME,
+          created_at: new Date()
+        }],
+        $sort: { created_at: -1 },
+        $slice: 3
+      }
+    },
+    $inc: { "latest_posts_followed.$[p].comments_count": 1 }
+  },
+  {
+    arrayFilters: [
+      { "p.post_id": POST_ID }
+    ]
+  }
+);
 ```
 
-Step 2: Get posts from them
+#### Create a Post (5%)
+```json
+db.Posts.insertOne({
+  author_id: ObjectId("675aaa100000000000000002"),
+  created_at: new Date(),
+  type: "text",
+  text: "MongoDB is awesome!",
+  tags: ["mongodb", "nosql"],
+  comments_count: 0,
+  likes_count: 0,
+  location: [48.15, 17.10]
+});
+
+const result = db.Posts.insertOne(post);
+const postId = result.insertedId;
+
+// Increment  post_count
+
+db.Users.updateOne(
+  { _id: userId },
+  {
+    $inc: { "stats.posts_count": 1 }
+  }
+);
+
+// Update my_latest_posts
+
+db.Users.updateOne(
+  { _id: userId },
+  {
+    $push: {
+      my_latest_posts: {
+        $each: [{
+          post_id: postId,
+          text: post.text,
+          type: post.type,
+          tags: post.tags,
+          image_url: post.image_url,
+          created_at: post.created_at,
+          embedding: myEmbeddingVector
+        }],
+        $slice: -10 // keep only latest 10 posts
+      }
+    }
+  }
+);
+
+// Update latest_posts_followed for all followers
+
+const followers = db.Follows.find({ followee_id: userId }).toArray();
+
+followers.forEach(f => {
+  db.Users.updateOne(
+    { _id: f.follower_id },
+    {
+      $push: {
+        latest_posts_followed: {
+          $each: [{
+            post_id: postId,
+            username: author.username,
+            avatar: author.avatar,
+            likes_count: 0,
+            reactions_count: 0,
+            created_at: post.created_at,
+          }],
+          $slice: -50 // keep latest 50 followed posts
+        }
+      }
+    }
+  );
+});
+```
+
+#### Click on User's Profile (8%)
 
 ```json
-db.Posts.find({ author_id: { $in: followees } })
+// Get user metadata & counters
+db.Users.findOne({ _id: userId })
+
+// Get last posts from user
+db.Posts.find({ author_id: userId })
         .sort({ created_at: -1 })
-        .limit(50);
+        .limit(10)
+
+// ultra fast (fan-out-on-write model):
+Users.my_latest_posts  (array)
+
 ```
 
-> This uses **Fan-Out on Read** but there is a subset on Users.latest_posts_followed for cached instant-load info
+#### Follow/Unfollow (<5%)
+
+```json
+
+// create indices
+db.Follows.createIndex({ follower_id: 1, followee_id: 1 }, { unique: true });
+db.Follows.createIndex({ followee_id: 1 });
+
+// insert into follows
+db.Follows.insertOne({
+  follower_id: followerId,
+  followee_id: followeeId,
+  created_at: new Date()
+});
+
+// update counters
+db.Users.updateOne(
+  { _id: followerId },
+  { $inc: { "stats.following_count": 1 } }
+);
+
+db.Users.updateOne(
+  { _id: followeeId },
+  { $inc: { "stats.followers_count": 1 } }
+);
+
+// fan-out: feed follower's newest posts
+
+const posts = db.Posts
+  .find({ author_id: followeeId })
+  .sort({ created_at: -1 })
+  .limit(10)
+  .toArray();
+
+posts.forEach(p => {
+  db.Users.updateOne(
+    { _id: followerId },
+    {
+      $push: {
+        latest_posts_followed: {
+          $each: [{
+            post_id: p._id,
+            image_url: p.image_url,
+            text: p.text,
+            created_at: p.created_at,
+            likes_count: p.likes_count,
+            reactions_count: p.reactions_count,
+            author_username: author.username,
+            author_avatar: author.avatar
+          }],
+          $slice: -50
+        }
+      }
+    }
+  );
+});
+
+```
 
 #### Seach Users
 
 Create index:
 
 ```json
-db.Users.createIndex({ username: "text" });
-```
+// create index
+db.Users.createIndex({ username: 1 });
 
-Automcomplete Query:
-
-```json
-db.Users.find({
-  username: { $regex: "^fil", $options: "i" }
-});
+// Automcomplete Query:
+db.Users.find(
+  { username: { $regex: "^fil", $options: "i" } },
+  { projection: { username: 1, avatar: 1 } }
+)
+.limit(10);
 ```
 
 #### Search Hashtags
 Search:
 
 ```json
+// create index
+db.Posts.createIndex({ tags: 1, created_at: -1 });
+
+
 db.Posts.find({ tags: "sunset" })
         .sort({ created_at: -1 })
         .limit(20);
@@ -311,5 +562,12 @@ db.Posts.find({ tags: "sunset" })
 Autocomplete:
 
 ```json
-db.Posts.distinct("tags", { tags: { $regex: "^su", $options: "i" } });
+// create index
+db.Hashtags.createIndex({ _id: 1 });
+
+// autocomplete hashtags via regex
+db.Hashtags.find(
+  { _id: { $regex: "^su", $options: "i" } }
+)
+.limit(10);
 ```
